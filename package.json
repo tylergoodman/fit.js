@@ -4,6 +4,7 @@
   "description": "fit( theThing, /* into */ theOtherThing );",
   "main": "fit.js",
   "scripts": {
+    "build": "uglifyjs fit.js --comments /copy/i -cmo fit.min.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "repository": {

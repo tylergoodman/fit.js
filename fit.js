@@ -1,21 +1,33 @@
 /* Copyright (C) 2014 Justin Windle, http://soulwire.co.uk */
 
-var fit = (function() {
+(function (root, factory) {
+  if (typeof define === 'function' && define.amd) {
+    define([], factory);
+  }
+  else if (typeof module === 'object' && module.exports) {
+    module.exports = factory();
+  }
+  else {
+    root.fit = factory();
+  }
+}(this, function () {
+
+  var fit = (function () {
 
     'use strict';
 
     /*
     ————————————————————————————————————————————————————————————————————————————————
-    
+
         Constants
-    
+
     ————————————————————————————————————————————————————————————————————————————————
     */
 
     var THROTTLE_DURATION = 50;
     var TRANSFORM_ORIGIN = 'TransformOrigin';
     var TRANSFORM = 'Transform';
-    var VENDORS = 'moz ms o webkit'.split( ' ' );
+    var VENDORS = 'moz ms o webkit'.split(' ');
     var CENTER = 'center';
     var BOTTOM = 'bottom';
     var RIGHT = 'right';
@@ -25,9 +37,9 @@ var fit = (function() {
 
     /*
     ————————————————————————————————————————————————————————————————————————————————
-    
+
         Globals
-    
+
     ————————————————————————————————————————————————————————————————————————————————
     */
 
@@ -40,421 +52,371 @@ var fit = (function() {
     var wait;
 
     var defaults = {
-        hAlign: CENTER,
-        vAlign: CENTER,
-        watch: false,
-        cover: false,
-        apply: true
+      hAlign: CENTER,
+      vAlign: CENTER,
+      watch: false,
+      cover: false,
+      apply: true
     };
 
     /*
     ————————————————————————————————————————————————————————————————————————————————
-    
+
         Utilities
-    
+
     ————————————————————————————————————————————————————————————————————————————————
     */
 
     // Uppercase proxy for regex
-
-    function toUpperCase( value ) {
-
-        return value.toUpperCase();
+    function toUpperCase(value) {
+      return value.toUpperCase();
     }
 
     // Returns true if an object is a number and not NaN
-
-    function isNumber( value ) {
-
-        return typeof value === 'number' && !isNaN( value );
+    function isNumber(value) {
+      return typeof value === 'number' && !isNaN(value);
     }
 
     // Shortcut to get the current time
-
     function getTime() {
-
-        return new Date().getTime();
+      return new Date()
+        .getTime();
     }
 
     // Simple array mapping method (for non-ES5 browsers)
+    function map(list, func) {
+      var out = [];
 
-    function map( list, func ) {
+      for (var i = 0, n = list.length; i < n; i++)
+        out[i] = func(list[i]);
 
-        var out = [];
-
-        for ( var i = 0, n = list.length; i < n; i++ )
-
-            out[ i ] = func( list[ i ] );
-
-        return out;
+      return out;
     }
 
     // Soft object augmentation
+    function extend(target, source) {
+      for (var key in source)
+        if (!(key in target))
+          target[key] = source[key];
 
-    function extend( target, source ) {
-
-        for ( var key in source )
-
-            if ( !( key in target ) )
-
-                target[ key ] = source[ key ];
-
-        return target;
+      return target;
     }
 
     // Determine vendor and prefix property
+    function prefix(prop) {
+      if (!vendor) {
+        var name,
+          style = getStyle(doc.body),
+          test = TRANSFORM;
 
-    function prefix( prop ) {
+        for (var i = 0, n = VENDORS.length; i < n; i++) {
+          vendor = VENDORS[i];
+          name = vendor + test;
 
-        if ( !vendor ) {
+          if (name in style) break;
 
-            var name, style = getStyle( doc.body ), test = TRANSFORM;
+          vendor = vendor.replace(/^(\w)/, toUpperCase);
+          name = vendor + test;
 
-            for ( var i = 0, n = VENDORS.length; i < n; i++ ) {
-
-                vendor = VENDORS[i];
-                name = vendor + test;
-
-                if ( name in style ) break;
-
-                vendor = vendor.replace( /^(\w)/, toUpperCase );
-                name = vendor + test;
-
-                if ( name in style ) break;
-            }
+          if (name in style) break;
         }
+      }
 
-        return vendor + prop;
+      return vendor + prop;
     }
 
     // Returns the current CSS transformation matrix as an array
+    function getMatrix(el) {
+      var css = getStyle(el);
+      var ctm = css[prefix(TRANSFORM)].replace(/[a-z()]/gi, '').split(',');
 
-    function getMatrix( el ) {
+      if (ctm.length < 6)
+        return [1, 0, 0, 1, 0, 0];
 
-        var css = getStyle( el );
-        var ctm = css[ prefix( TRANSFORM ) ].replace( /[a-z()]/gi, '' ).split( ',' );
+      for (var i = 0; i < 6; i++)
+        ctm[i] = parseFloat(ctm[i]);
 
-        if ( ctm.length < 6 )
-
-            return [ 1, 0, 0, 1, 0, 0 ];
-
-        for ( var i = 0; i < 6; i++ )
-
-            ctm[i] = parseFloat( ctm[i] );
-
-        return ctm;
+      return ctm;
     }
 
-    if( !Array.prototype.indexOf ){
+    if (!Array.prototype.indexOf) {
 
-        Array.prototype.indexOf = function( object ) {
-            
-            for( var i = 0; i < this.length; ++i )
+      Array.prototype.indexOf = function (object) {
+        for (var i = 0; i < this.length; ++i)
+          if (this[i] == object) return i;
 
-                if( this[i] == object ) return i
-
-            return -1;
-        }
+        return -1;
+      }
     }
 
     /*
     ————————————————————————————————————————————————————————————————————————————————
-    
+
         Transform methods
-    
+
     ————————————————————————————————————————————————————————————————————————————————
     */
 
-    function cssTransform( transform, element ) {
-        
-        var matrix = getMatrix( element );
+    function cssTransform(transform, element) {
+      var matrix = getMatrix(element);
 
-        matrix[0] = transform.scale;
-        matrix[3] = transform.scale;
-        matrix[4] += transform.tx;
-        matrix[5] += transform.ty;
+      matrix[0] = transform.scale;
+      matrix[3] = transform.scale;
+      matrix[4] += transform.tx;
+      matrix[5] += transform.ty;
 
-        var fixed = map( matrix, function( n ) { return n.toFixed( 6 ); });
+      var fixed = map(matrix, function (n) {
+        return n.toFixed(6);
+      });
 
-        element.style[ prefix( TRANSFORM_ORIGIN ) ] = '0 0';
-        element.style[ prefix( TRANSFORM ) ] = 'matrix(' + fixed.join( ',' ) + ')';
+      element.style[prefix(TRANSFORM_ORIGIN)] = '0 0';
+      element.style[prefix(TRANSFORM)] = 'matrix(' + fixed.join(',') + ')';
     }
 
-    function cssPosition( transform, element ) {
+    function cssPosition(transform, element) {
+      var style = getStyle(element);
+      var left = parseFloat(style.left) || 0;
+      var top = parseFloat(style.top) || 0;
 
-        var style = getStyle( element );
-        var left = parseFloat( style.left ) || 0;
-        var top = parseFloat( style.top ) || 0;
+      if (style.position === 'static')
 
-        if ( style.position === 'static' )
+        element.style.position = 'relative';
 
-            element.style.position = 'relative';
-        
-        element.style.left = left + transform.tx + PX;
-        element.style.top = top + transform.ty + PX;
-        
-        element.style.height = transform.height + PX;
-        element.style.width = transform.width + PX;
+      element.style.left = left + transform.tx + PX;
+      element.style.top = top + transform.ty + PX;
+
+      element.style.height = transform.height + PX;
+      element.style.width = transform.width + PX;
     }
 
-    function cssMargin( transform, element ) {
-        
-        var style = getStyle( element );
-        var left = parseFloat( style.marginLeft ) || 0;
-        var top = parseFloat( style.marginTop ) || 0;
-        
-        element.style.marginLeft = left + transform.tx + PX;
-        element.style.marginTop = top + transform.ty + PX;
-        
-        element.style.height = transform.height + PX;
-        element.style.width = transform.width + PX;
+    function cssMargin(transform, element) {
+      var style = getStyle(element);
+      var left = parseFloat(style.marginLeft) || 0;
+      var top = parseFloat(style.marginTop) || 0;
+
+      element.style.marginLeft = left + transform.tx + PX;
+      element.style.marginTop = top + transform.ty + PX;
+
+      element.style.height = transform.height + PX;
+      element.style.width = transform.width + PX;
     }
 
-    function rectangle( transform, target ) {
-
-        target.height *= transform.scale;
-        target.width *= transform.scale;
-        target.x += transform.tx;
-        target.y += transform.ty;
+    function rectangle(transform, target) {
+      target.height *= transform.scale;
+      target.width *= transform.scale;
+      target.x += transform.tx;
+      target.y += transform.ty;
     }
 
     /*
     ————————————————————————————————————————————————————————————————————————————————
-    
+
         Given an element or object, defines a standard rectangle
-    
+
     ————————————————————————————————————————————————————————————————————————————————
     */
 
-    function toRectangle( target ) {
+    function toRectangle(target) {
+      if (target.nodeType && target.nodeType == 1) {
+        var bounds = target.getBoundingClientRect();
 
-        if ( target.nodeType && target.nodeType == 1 ) {
+        target = {
+          height: target.offsetHeight,
+          width: target.offsetWidth,
+          x: bounds.left,
+          y: bounds.top
+        };
+      }
 
-            var bounds = target.getBoundingClientRect();
-            
-            target = {
-                height: target.offsetHeight,
-                width: target.offsetWidth,
-                x: bounds.left,
-                y: bounds.top
-            };
-        }
+      if (!isNumber(target.x) && isNumber(target.left))
+        target.x = target.left;
 
-        if ( !isNumber( target.x ) && isNumber( target.left ) )
+      if (!isNumber(target.y) && isNumber(target.top))
+        target.y = target.top;
 
-            target.x = target.left;
-
-        if ( !isNumber( target.y ) && isNumber( target.top ) )
-
-            target.y = target.top;
-
-        return target;
+      return target;
     }
 
     /*
     ————————————————————————————————————————————————————————————————————————————————
-    
+
         Event Handlers
-    
+
     ————————————————————————————————————————————————————————————————————————————————
     */
 
     function onWindowResize() {
+      // Throttle
 
-        // Throttle
+      var now = getTime();
+      var delta = now - then;
 
-        var now = getTime();
-        var delta = now - then;
+      if (delta <= THROTTLE_DURATION) {
+        clearInterval(wait);
+        wait = setTimeout(onWindowResize, THROTTLE_DURATION - delta);
+      }
+      else {
+        for (var i = 0, n = watching.length; i < n; i++)
+          watching[i]();
 
-        if ( delta <= THROTTLE_DURATION ) {
-
-            clearInterval( wait );
-            wait = setTimeout( onWindowResize, THROTTLE_DURATION - delta );
-
-        } else {
-
-            for ( var i = 0, n = watching.length; i < n; i++ )
-
-                watching[ i ]();
-
-            then = now;
-        }
+        then = now;
+      }
     }
 
     /*
     ————————————————————————————————————————————————————————————————————————————————
-    
+
         Fit
-    
+
     ————————————————————————————————————————————————————————————————————————————————
     */
 
-    function fit( target, container, options, callback, transform ) {
+    function fit(target, container, options, callback, transform) {
+      // Normalise inputs to standard rectangle definitions
 
-        // Normalise inputs to standard rectangle definitions
+      var rect = toRectangle(target);
+      var area = toRectangle(container);
 
-        var rect = toRectangle( target );
-        var area = toRectangle( container );
+      // Compute position offset and scale
 
-        // Compute position offset and scale
+      var wa = rect.width;
+      var ha = rect.height;
 
-        var wa = rect.width;
-        var ha = rect.height;
-        
-        var wb = area.width;
-        var hb = area.height;
-        
-        var sx = wb / wa;
-        var sy = hb / ha;
-        
-        var ra = wa / ha;
-        var rb = wb / hb;
-        
-        var sH = options.cover ? sy : sx;
-        var sV = options.cover ? sx : sy;
-        
-        var scale = ra >= rb ? sH : sV;
-        var w = wa * scale;
-        var h = ha * scale;
+      var wb = area.width;
+      var hb = area.height;
 
-        var tx = options.hAlign == CENTER ? 0.5 * ( w - wb ) : options.hAlign == RIGHT ? w - wb : 0.0;
-        var ty = options.vAlign == CENTER ? 0.5 * ( h - hb ) : options.vAlign == BOTTOM ? h - hb : 0.0;
+      var sx = wb / wa;
+      var sy = hb / ha;
 
-        // Build / modify transform object
+      var ra = wa / ha;
+      var rb = wb / hb;
 
-        transform = transform || {};
-                
-        transform.tx = ( area.x - tx ) - rect.x;
-        transform.ty = ( area.y - ty ) - rect.y;
-            
-        transform.x = ( area.x - tx ) - rect.x * scale;
-        transform.y = ( area.y - ty ) - rect.y * scale;
-            
-        transform.height = rect.height * scale;
-        transform.width = rect.width * scale;
+      var sH = options.cover ? sy : sx;
+      var sV = options.cover ? sx : sy;
 
-        transform.scale = scale;
+      var scale = ra >= rb ? sH : sV;
+      var w = wa * scale;
+      var h = ha * scale;
 
-        // Apply default transform
+      var tx = options.hAlign == CENTER ? 0.5 * (w - wb) : options.hAlign == RIGHT ? w - wb : 0.0;
+      var ty = options.vAlign == CENTER ? 0.5 * (h - hb) : options.vAlign == BOTTOM ? h - hb : 0.0;
 
-        if ( callback )
+      // Build / modify transform object
 
-            callback( transform, target );
+      transform = transform || {};
 
-        else if ( options.apply ) {
+      transform.tx = (area.x - tx) - rect.x;
+      transform.ty = (area.y - ty) - rect.y;
 
-            if (typeof(HTMLElement) != 'undefined' && target instanceof HTMLElement )
+      transform.x = (area.x - tx) - rect.x * scale;
+      transform.y = (area.y - ty) - rect.y * scale;
 
-                callback = cssTransform;
+      transform.height = rect.height * scale;
+      transform.width = rect.width * scale;
 
-            else
+      transform.scale = scale;
 
-                callback = rectangle;
+      // Apply default transform
 
-            callback( transform, target );
-        }
+      if (callback)
+        callback(transform, target);
+      else if (options.apply) {
+        if (typeof (HTMLElement) != 'undefined' && target instanceof HTMLElement)
+          callback = cssTransform;
+        else
+          callback = rectangle;
+        callback(transform, target);
+      }
 
-        return transform;
+      return transform;
     }
 
-    function main( target, container, options, callback ) {
+    function main(target, container, options, callback) {
+      // Parse arguments
 
-        // Parse arguments
+      if (!target || !container)
+        throw 'You must supply a target and a container';
 
-        if ( !target || !container )
+      if (typeof options === 'function') {
+        callback = options;
+        options = {};
+      }
 
-            throw 'You must supply a target and a container';
+      // Default options
 
-        if ( typeof options === 'function' ) {
+      options = extend(options || {}, defaults);
 
-            callback = options;
-            options = {};
+      // Do it
+
+      var transform = fit(target, container, options, callback);
+
+      // Optionally handle window resizes automatically
+
+      if (options.watch) {
+        if (!watching.length) {
+          if (win.addEventListener)
+            win.addEventListener('resize', onWindowResize);
+          else
+            win.attachEvent('onresize', onWindowResize);
         }
 
-        // Default options
+        transform.trigger = function () {
+          fit(target, container, options, callback, transform);
+        };
 
-        options = extend( options || {}, defaults );
+        transform.on = function (suppress) {
+          var index = watching.indexOf(transform.trigger);
 
-        // Do it
+          if (!~index)
+            watching.push(transform.trigger);
 
-        var transform = fit( target, container, options, callback );
+          if (!suppress)
+            transform.trigger();
+        };
 
-        // Optionally handle window resizes automatically
+        transform.off = function () {
+          var index = watching.indexOf(transform.trigger);
 
-        if ( options.watch ) {
+          if (!!~index)
+            watching.splice(index, 1);
+        };
 
-            if ( !watching.length ){
+        transform.on(true);
+      }
 
-                if(win.addEventListener){
-                    win.addEventListener( 'resize', onWindowResize );
-                }else{
-                    win.attachEvent( 'onresize', onWindowResize );
-                }
-
-            }
-
-            transform.trigger = function() {
-
-                fit( target, container, options, callback, transform );
-            };
-
-            transform.on = function( suppress ) {
-
-                var index = watching.indexOf( transform.trigger );
-
-                if ( !~index )
-
-                    watching.push( transform.trigger );
-
-                if ( !suppress )
-
-                    transform.trigger();
-            };
-
-            transform.off = function() {
-
-                var index = watching.indexOf( transform.trigger );
-
-                if ( !!~index )
-
-                    watching.splice( index, 1 );
-            };
-
-            transform.on( true );
-        }
-
-        return transform;
+      return transform;
     }
 
     /*
     ————————————————————————————————————————————————————————————————————————————————
-    
+
         API
-    
+
     ————————————————————————————————————————————————————————————————————————————————
     */
 
-    return extend( main, {
+    return extend(main, {
+      // Properties
 
-        // Properties
+      watching: watching,
+      defaults: defaults,
 
-        watching: watching,
-        defaults: defaults,
+      // Methods
 
-        // Methods
+      cssTransform: cssTransform,
+      cssPosition: cssPosition,
+      cssMargin: cssMargin,
 
-        cssTransform: cssTransform,
-        cssPosition: cssPosition,
-        cssMargin: cssMargin,
+      // Constants
 
-        // Constants
-
-        CENTER: CENTER,
-        BOTTOM: BOTTOM,
-        RIGHT: RIGHT,
-        LEFT: LEFT,
-        TOP: TOP
-
+      CENTER: CENTER,
+      BOTTOM: BOTTOM,
+      RIGHT: RIGHT,
+      LEFT: LEFT,
+      TOP: TOP
     });
 
-})();
+  })();
+
+  return fit;
+}));
